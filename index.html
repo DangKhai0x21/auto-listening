@@ -51,6 +51,7 @@
             text-align: center;
             margin: 15px;
             font-style: italic;
+            color: #facc15;
         }
     </style>
 </head>
@@ -62,7 +63,7 @@
         <audio id="audioPlayer" controls></audio>
     </div>
 
-    <div class="status" id="status">Đang fetch dữ liệu từ website...</div>
+    <div class="status" id="status">Đang kết nối qua proxy...</div>
 
     <ul id="playlist"></ul>
 
@@ -75,47 +76,81 @@
         let tracks = [];
         let currentIndex = 0;
 
-        // Hàm lấy dữ liệu từ trang
-        async function fetchTracks() {
-            try {
-                statusEl.textContent = "Đang tải danh sách audio...";
-                
-                const response = await fetch('https://ieltsxuanphi.edu.vn/full-bo-tai-lieu-cambridge-ielts/');
-                const html = await response.text();
+        // ==================== PROXY BYPASS ====================
+        const proxies = [
+            "https://api.codetabs.com/v1/proxy?quest=",
+            "https://corsproxy.io/?",
+            "https://proxy.cors.sh/",
+            "https://api.allorigins.win/raw?url=",
+            "https://cors.bridged.cc/"
+        ];
 
-                // Parse các link MP3
+        async function fetchWithProxy(url) {
+            for (let proxy of proxies) {
+                try {
+                    let fullUrl = proxy + encodeURIComponent(url);
+                    if (proxy.includes("corsproxy.io")) fullUrl = proxy + encodeURIComponent(url);
+                    if (proxy.includes("proxy.cors.sh")) fullUrl = proxy + url;
+
+                    const response = await fetch(fullUrl, { 
+                        mode: 'cors',
+                        headers: proxy.includes("cors.sh") ? { "x-cors-api-key": "temp" } : {}
+                    });
+
+                    if (response.ok) {
+                        return await response.text();
+                    }
+                } catch (e) {
+                    console.log(`Proxy ${proxy} thất bại, thử proxy tiếp theo...`);
+                }
+            }
+            throw new Error("Tất cả proxy đều không hoạt động");
+        }
+        // ====================================================
+
+        async function fetchTracks() {
+            const targetUrl = "https://ieltsxuanphi.edu.vn/full-bo-tai-lieu-cambridge-ielts/";
+            
+            try {
+                statusEl.textContent = "Đang tải danh sách audio qua proxy...";
+                
+                const html = await fetchWithProxy(targetUrl);
+
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
                 
+                // Lấy tất cả link mp3
                 const links = doc.querySelectorAll('a[href$=".mp3"]');
                 
                 tracks = Array.from(links).map(link => {
-                    const url = link.href;
-                    const name = link.textContent.trim() || url.split('/').pop();
+                    let url = link.href;
+                    const name = link.textContent.trim() || url.split('/').pop().replace('.mp3', '');
                     return { name, url };
                 });
 
+                // Fallback nếu không lấy được bằng DOM
                 if (tracks.length === 0) {
-                    // Fallback: dùng regex nếu không parse được
                     const regex = /https?:\/\/[^\s"']+\.mp3/g;
                     const matches = html.match(regex) || [];
                     tracks = matches.map(url => ({
-                        name: url.split('/').pop().replace(/\.mp3$/, ''),
+                        name: decodeURIComponent(url.split('/').pop().replace('.mp3', '')),
                         url: url
                     }));
                 }
 
-                renderPlaylist();
-                statusEl.textContent = `✅ Đã tải ${tracks.length} tracks`;
-                
-                if (tracks.length > 0) {
-                    playTrack(0);
+                if (tracks.length === 0) {
+                    throw new Error("Không tìm thấy audio nào.");
                 }
+
+                renderPlaylist();
+                statusEl.innerHTML = `✅ Thành công! Tìm thấy <strong>${tracks.length}</strong> audio`;
+                
+                playTrack(0);
 
             } catch (error) {
                 console.error(error);
-                statusEl.innerHTML = `❌ Không thể fetch trực tiếp (do CORS).<br>
-                <strong>Bạn có thể copy danh sách thủ công hoặc dùng proxy.</strong>`;
+                statusEl.innerHTML = `❌ Không thể tải dữ liệu.<br>
+                <small>Thử refresh trang hoặc chờ proxy hoạt động trở lại.</small>`;
             }
         }
 
@@ -123,7 +158,7 @@
             playlistEl.innerHTML = '';
             tracks.forEach((track, index) => {
                 const li = document.createElement('li');
-                li.textContent = track.name;
+                li.textContent = `${index + 1}. ${track.name}`;
                 li.onclick = () => playTrack(index);
                 playlistEl.appendChild(li);
             });
@@ -138,21 +173,19 @@
             audio.src = track.url;
             currentTitle.textContent = `Đang phát: ${track.name}`;
             
-            // Highlight track đang phát
             document.querySelectorAll('li').forEach((li, i) => {
                 li.classList.toggle('playing', i === index);
             });
 
-            audio.play();
+            audio.play().catch(() => {});
         }
 
-        // Auto next khi hết bài
         audio.addEventListener('ended', () => {
             currentIndex = (currentIndex + 1) % tracks.length;
             playTrack(currentIndex);
         });
 
-        // Load khi mở trang
+        // Khởi chạy
         window.onload = fetchTracks;
     </script>
 </body>
