@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cambridge IELTS Audio - Auto Play</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #60a5fa;
+        }
+        #player {
+            text-align: center;
+            margin: 30px 0;
+        }
+        audio {
+            width: 90%;
+            max-width: 700px;
+        }
+        #current {
+            font-size: 1.3em;
+            margin: 15px 0;
+            color: #93c5fd;
+        }
+        ul {
+            max-width: 800px;
+            margin: 20px auto;
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            padding: 12px 15px;
+            background: #1e2937;
+            margin: 8px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        li:hover, li.playing {
+            background: #3b82f6;
+            color: white;
+        }
+        .status {
+            text-align: center;
+            margin: 15px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎧 Cambridge IELTS 8-19 - Auto Play</h1>
+    
+    <div id="player">
+        <div id="current">Đang tải danh sách...</div>
+        <audio id="audioPlayer" controls></audio>
+    </div>
+
+    <div class="status" id="status">Đang fetch dữ liệu từ website...</div>
+
+    <ul id="playlist"></ul>
+
+    <script>
+        const audio = document.getElementById('audioPlayer');
+        const currentTitle = document.getElementById('current');
+        const playlistEl = document.getElementById('playlist');
+        const statusEl = document.getElementById('status');
+
+        let tracks = [];
+        let currentIndex = 0;
+
+        // Hàm lấy dữ liệu từ trang
+        async function fetchTracks() {
+            try {
+                statusEl.textContent = "Đang tải danh sách audio...";
+                
+                const response = await fetch('https://ieltsxuanphi.edu.vn/full-bo-tai-lieu-cambridge-ielts/');
+                const html = await response.text();
+
+                // Parse các link MP3
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                const links = doc.querySelectorAll('a[href$=".mp3"]');
+                
+                tracks = Array.from(links).map(link => {
+                    const url = link.href;
+                    const name = link.textContent.trim() || url.split('/').pop();
+                    return { name, url };
+                });
+
+                if (tracks.length === 0) {
+                    // Fallback: dùng regex nếu không parse được
+                    const regex = /https?:\/\/[^\s"']+\.mp3/g;
+                    const matches = html.match(regex) || [];
+                    tracks = matches.map(url => ({
+                        name: url.split('/').pop().replace(/\.mp3$/, ''),
+                        url: url
+                    }));
+                }
+
+                renderPlaylist();
+                statusEl.textContent = `✅ Đã tải ${tracks.length} tracks`;
+                
+                if (tracks.length > 0) {
+                    playTrack(0);
+                }
+
+            } catch (error) {
+                console.error(error);
+                statusEl.innerHTML = `❌ Không thể fetch trực tiếp (do CORS).<br>
+                <strong>Bạn có thể copy danh sách thủ công hoặc dùng proxy.</strong>`;
+            }
+        }
+
+        function renderPlaylist() {
+            playlistEl.innerHTML = '';
+            tracks.forEach((track, index) => {
+                const li = document.createElement('li');
+                li.textContent = track.name;
+                li.onclick = () => playTrack(index);
+                playlistEl.appendChild(li);
+            });
+        }
+
+        function playTrack(index) {
+            if (index < 0 || index >= tracks.length) return;
+            
+            currentIndex = index;
+            const track = tracks[index];
+            
+            audio.src = track.url;
+            currentTitle.textContent = `Đang phát: ${track.name}`;
+            
+            // Highlight track đang phát
+            document.querySelectorAll('li').forEach((li, i) => {
+                li.classList.toggle('playing', i === index);
+            });
+
+            audio.play();
+        }
+
+        // Auto next khi hết bài
+        audio.addEventListener('ended', () => {
+            currentIndex = (currentIndex + 1) % tracks.length;
+            playTrack(currentIndex);
+        });
+
+        // Load khi mở trang
+        window.onload = fetchTracks;
+    </script>
+</body>
+</html>
