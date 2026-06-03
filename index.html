@@ -923,16 +923,13 @@
                 if(mp3Files.length === 0) throw new Error('Không tìm thấy file mp3 nào');
 
                 mp3Files.forEach(file => {
-                    // BẬC THẦY LINH HOẠT: Bóc toàn bộ các cụm số bất kể khoảng trắng hay ký tự lạ
                     const cleanName = file.name.replace(/\.[^/.]+$/, ""); // Bỏ đuôi .mp3
                     const numbers = cleanName.match(/\d+/g); // Quét chuỗi số
                     
                     let key = "";
                     if (numbers && numbers.length >= 3) {
-                        // Nhận diện Cam, Test, Part dựa trên thứ tự số xuất hiện
                         key = `C${numbers[0]}_T${numbers[1]}_P${numbers[2]}`;
                     } else {
-                        // Nếu đặt tên quá dị không có đủ số, dùng chuỗi hash tạm để giữ file lại không bị nuốt mất
                         key = "RAW_" + btoa(unescape(encodeURIComponent(file.name))).substring(0, 8);
                     }
 
@@ -953,14 +950,12 @@
             }
         }
 
-        // Tạo cây dữ liệu chạy ngầm khi API GitHub bị chặn (Rate Limit)
         function generateFallbackTree() {
             Object.keys(LEAN_DATA_BASE).forEach(key => {
                 const [c, t, p] = key.split('_');
                 const camNum = c.substring(1);
                 const testNum = t.substring(1);
                 const partNum = p.substring(1);
-                // Tạo tên file tiêu chuẩn dự phòng
                 const fileName = `Cam ${camNum} – Test ${testNum} – Section ${partNum}.mp3`;
 
                 audioFilesMap[key] = {
@@ -1002,7 +997,6 @@
             const audioData = audioFilesMap[key];
             const songNguData = LEAN_DATA_BASE[key];
             
-            // Dọn sạch và ẩn khung câu hỏi cũ
             contentBlock.classList.add('hidden');
             contentText.innerHTML = '';
             audioError.classList.add('hidden');
@@ -1011,7 +1005,6 @@
                 currentTitle.textContent = audioData.name.replace('.mp3', '');
                 audioFileName.textContent = audioData.name;
                 
-                // Đập nguồn nhạc trực tiếp từ CDN GitHub về player
                 audioPlayer.src = audioData.download_url;
                 audioPlayer.load();
                 
@@ -1019,7 +1012,6 @@
                     audioPlayer.play().catch(() => console.log("Chờ tương tác của user để phát nhạc"));
                 }
                 
-                // Trói buộc chặt chẽ link song ngữ vào bài học hiện tại
                 currentTargetUrl = (audioData.isMapped && songNguData) ? songNguData.url : "";
             }
 
@@ -1030,6 +1022,18 @@
         // Bắt lỗi nếu đường dẫn âm thanh CDN bị hỏng
         audioPlayer.addEventListener('error', () => {
             audioError.classList.remove('hidden');
+        });
+
+        // --- TÍNH NĂNG MỚI: TỰ ĐỘNG CHUYỂN BÀI KHI AUDIO KẾT THÚC ---
+        audioPlayer.addEventListener('ended', () => {
+            console.log("Bài học hiện tại đã phát xong. Hệ thống tự động chuyển bài...");
+            if (currentIndex < sortedKeys.length - 1) {
+                // Nếu vẫn chưa phải bài cuối danh sách, tự động nhảy lên bài tiếp theo
+                navigate(1);
+            } else {
+                // Nếu đã nghe hết sạch danh sách, tự động quay về bài ngẫu nhiên để lặp lại chu kỳ học
+                pickRandomAudio(true);
+            }
         });
 
         // --- BƯỚC 4: FETCH NỘI DUNG VÀ XOÁ BỎ RÁC/SVG THEO YÊU CẦU ---
@@ -1059,16 +1063,13 @@
                 const doc = parser.parseFromString(html, 'text/html');
                 const mainArticle = doc.querySelector('.entry-content') || doc.querySelector('article') || doc.body;
                 
-                // 1. Quét dọn các thẻ rác hệ thống
                 mainArticle.querySelectorAll('script, style, iframe, header, footer, nav, .sharedaddy').forEach(el => el.remove());
                 
-                // 2. DIỆT TẬN GỐC: Tìm đúng mã path SVG bóng đèn bạn yêu cầu và hủy diệt thẻ <svg> cha của nó
                 mainArticle.querySelectorAll('path[d^="M6.5 0C3.48"]').forEach(path => {
                     const parentSvg = path.closest('svg');
                     if (parentSvg) parentSvg.remove();
                 });
                 
-                // Đổ text siêu sạch vào UI
                 contentText.innerHTML = mainArticle.innerHTML;
                 contentBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
             })
